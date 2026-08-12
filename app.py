@@ -18,14 +18,27 @@ confidence_threshold = st.sidebar.slider("Confidence Threshold", 0.1, 1.0, 0.5)
 os.makedirs("data/uploads", exist_ok=True)
 os.makedirs("data/low_conf", exist_ok=True)
 
-# ================== LOAD MODEL ==================
+import os
+
 model_available = False
+
 try:
     from ultralytics import YOLO
+
+    st.write("Current files:", os.listdir())
+    
+    if os.path.exists("model"):
+        st.write("Model folder found:", os.listdir("model"))
+    
     if os.path.exists("model/best.pt"):
         model = YOLO("model/best.pt")
         model_available = True
-except:
+        st.success("Model loaded successfully ✅")
+    else:
+        st.error("best.pt NOT found ❌")
+
+except Exception as e:
+    st.error(f"Model loading failed: {e}")
     model_available = False
 
 # ================== FILE UPLOAD ==================

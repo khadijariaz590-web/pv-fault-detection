@@ -4,7 +4,6 @@ import os
 import random
 import pandas as pd
 from datetime import datetime
-import cv2
 import numpy as np
 
 # ================== PAGE CONFIG ==================

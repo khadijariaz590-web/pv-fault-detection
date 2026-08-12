@@ -61,49 +61,56 @@ if file:
     # Save image
     img_path = f"data/uploads/{file.name}"
     img.save(img_path)
+# ================== DETECTION ==================
+with col2:
+    st.subheader("🔍 Detection Results")
 
-    # ================== DETECTION ==================
-    with col2:
-        st.subheader("🔍 Detection Results")
+    fault_list = []
+    total_faults = 0
 
-        fault_list = []
-        total_faults = 0
+    if model_available:
+        results = model.predict(img, conf=confidence_threshold)
 
-        if model_available:
-            results = model.predict(img, conf=confidence_threshold)
+        for r in results:
+            plotted_img = r.plot()
 
-            for r in results:
-                plotted_img = r.plot()
+            boxes = r.boxes
+            if boxes is not None:
+                total_faults += len(boxes)
 
-                boxes = r.boxes
-                if boxes is not None:
-                    total_faults += len(boxes)
+                for b in boxes:
+                    cls = int(b.cls[0])
+                    name = model.names[cls]
+                    conf = float(b.conf[0])
 
-                    for b in boxes:
-                        cls = int(b.cls[0])
-                        name = model.names[cls]
-                        conf = float(b.conf[0])
+                    fault_list.append(name)
 
-                        fault_list.append(name)
+                    # ✅ Confidence Display
+                    st.write(f"🔍 {name} - Confidence: {conf:.2f}")
 
-                        # ✅ Confidence Display
-                        st.write(f"🔍 {name} - Confidence: {conf:.2f}")
+        # ✅ Show detection image
+        st.image(plotted_img, caption="Detected Image", use_container_width=True)
 
-            # Show detection image
-            st.image(plotted_img, caption="Detected Image", use_container_width=True)
+        # ✅ Download Button (FIXED)
+        import io
+        from PIL import Image
 
-            # ✅ Download Button
-            img_bytes = cv2.imencode('.png', plotted_img)[1].tobytes()
-            st.download_button(
-                label="📥 Download Result Image",
-                data=img_bytes,
-                file_name="detected_image.png",
-                mime="image/png"
-            )
+        img_pil = Image.fromarray(plotted_img)
+        buf = io.BytesIO()
+        img_pil.save(buf, format="PNG")
+        img_bytes = buf.getvalue()
 
-            st.success("Model Detection Active ✅")
+        st.download_button(
+            label="📥 Download Result Image",
+            data=img_bytes,
+            file_name="detected_image.png",
+            mime="image/png"
+        )
 
-        else:
+        st.success("Model Detection Active ✅")
+
+    else:
+        st.warning("Using Dummy Detection (Model not loaded)")
             # -------- DUMMY MODE --------
             fault_types = ["crack", "dust", "hotspot"]
             fault_list = random.choices(fault_types, k=random.randint(1, 3))

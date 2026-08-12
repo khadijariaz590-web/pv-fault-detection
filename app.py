@@ -5,6 +5,7 @@ import random
 import pandas as pd
 from datetime import datetime
 import numpy as np
+import io
 
 # ================== PAGE CONFIG ==================
 st.set_page_config(page_title="PV Fault Dashboard", layout="wide")
@@ -18,18 +19,12 @@ confidence_threshold = st.sidebar.slider("Confidence Threshold", 0.1, 1.0, 0.5)
 os.makedirs("data/uploads", exist_ok=True)
 os.makedirs("data/low_conf", exist_ok=True)
 
-import os
-
+# ================== LOAD MODEL ==================
 model_available = False
 
 try:
     from ultralytics import YOLO
 
-    st.write("Current files:", os.listdir())
-    
-    if os.path.exists("model"):
-        st.write("Model folder found:", os.listdir("model"))
-    
     if os.path.exists("model/best.pt"):
         model = YOLO("model/best.pt")
         model_available = True
@@ -61,56 +56,50 @@ if file:
     # Save image
     img_path = f"data/uploads/{file.name}"
     img.save(img_path)
-# ================== DETECTION ==================
-with col2:
-    st.subheader("🔍 Detection Results")
 
-    fault_list = []
-    total_faults = 0
+    # ================== DETECTION ==================
+    with col2:
+        st.subheader("🔍 Detection Results")
 
-    if model_available:
-        results = model.predict(img, conf=confidence_threshold)
+        fault_list = []
+        total_faults = 0
+        results = []
 
-        for r in results:
-            plotted_img = r.plot()
+        if model_available:
+            results = model.predict(img, conf=confidence_threshold)
 
-            boxes = r.boxes
-            if boxes is not None:
-                total_faults += len(boxes)
+            for r in results:
+                plotted_img = r.plot()
 
-                for b in boxes:
-                    cls = int(b.cls[0])
-                    name = model.names[cls]
-                    conf = float(b.conf[0])
+                if r.boxes is not None:
+                    total_faults += len(r.boxes)
 
-                    fault_list.append(name)
+                    for b in r.boxes:
+                        cls = int(b.cls[0])
+                        name = model.names[cls]
+                        conf = float(b.conf[0])
 
-                    # ✅ Confidence Display
-                    st.write(f"🔍 {name} - Confidence: {conf:.2f}")
+                        fault_list.append(name)
+                        st.write(f"🔍 {name} - Confidence: {conf:.2f}")
 
-        # ✅ Show detection image
-        st.image(plotted_img, caption="Detected Image", use_container_width=True)
+            # Show detection image
+            st.image(plotted_img, caption="Detected Image", use_container_width=True)
 
-        # ✅ Download Button (FIXED)
-        import io
-        from PIL import Image
+            # Download button
+            img_pil = Image.fromarray(plotted_img)
+            buf = io.BytesIO()
+            img_pil.save(buf, format="PNG")
 
-        img_pil = Image.fromarray(plotted_img)
-        buf = io.BytesIO()
-        img_pil.save(buf, format="PNG")
-        img_bytes = buf.getvalue()
+            st.download_button(
+                label="📥 Download Result Image",
+                data=buf.getvalue(),
+                file_name="detected_image.png",
+                mime="image/png"
+            )
 
-        st.download_button(
-            label="📥 Download Result Image",
-            data=img_bytes,
-            file_name="detected_image.png",
-            mime="image/png"
-        )
+            st.success("Model Detection Active ✅")
 
-        st.success("Model Detection Active ✅")
-
-    else:
-        st.warning("Using Dummy Detection (Model not loaded)")
+        else:
             # -------- DUMMY MODE --------
             fault_types = ["crack", "dust", "hotspot"]
             fault_list = random.choices(fault_types, k=random.randint(1, 3))
@@ -124,7 +113,7 @@ with col2:
         if fault_list:
             st.write("Detected Faults:", fault_list)
 
-        # ✅ Fault Severity
+        # Fault Severity
         if total_faults <= 2:
             severity = "🟢 Low"
         elif total_faults <= 5:
@@ -134,7 +123,7 @@ with col2:
 
         st.write(f"⚠️ Fault Severity Level: {severity}")
 
-        # ================== ALERT SYSTEM ==================
+        # ================== ALERT ==================
         if total_faults >= 5:
             st.error("🚨 High Fault Detected! Immediate Maintenance Required")
         elif total_faults >= 3:
@@ -146,24 +135,19 @@ with col2:
         efficiency = max(0, 100 - (total_faults * 5))
         st.metric("⚡ Estimated Efficiency (%)", efficiency)
 
-# ================== ACTIVE LEARNING ==================
+    # ================== ACTIVE LEARNING ==================
+    if model_available and results:
+        for r in results:
+            if r.boxes is not None and len(r.boxes) > 0:
+                avg_conf = float(r.boxes.conf.mean())
 
-if model_available and 'results' in locals():
+                st.write(f"Average Confidence: {avg_conf:.2f}")
 
-    for r in results:
-        if r.boxes is not None and len(r.boxes) > 0:
+                if avg_conf < 0.9:
+                    save_path = f"data/low_conf/{file.name}"
+                    img.save(save_path)
+                    st.warning("Saved to low_conf for retraining ⚠️")
 
-            avg_conf = float(r.boxes.conf.mean())
-
-            # Show confidence
-            st.write(f"Average Confidence: {avg_conf:.2f}")
-
-            # Save low confidence images
-            if avg_conf < 0.9:
-                save_path = f"data/low_conf/{file.name}"
-                img.save(save_path)
-
-                st.warning("Saved to low_conf for retraining ⚠️")
     # ================== CHARTS ==================
     st.subheader("📊 Fault Distribution")
 
@@ -173,8 +157,6 @@ if model_available and 'results' in locals():
         chart_data.columns = ["Fault", "Count"]
 
         st.bar_chart(chart_data.set_index("Fault"))
-
-        st.subheader("📊 Fault Details Table")
         st.dataframe(chart_data)
 
     # ================== LOGGING ==================

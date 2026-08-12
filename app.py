@@ -139,20 +139,24 @@ if file:
         efficiency = max(0, 100 - (total_faults * 5))
         st.metric("⚡ Estimated Efficiency (%)", efficiency)
 
-        # ================== ACTIVE LEARNING ==================
-if model_available:
+# ================== ACTIVE LEARNING ==================
+
+if model_available and 'results' in locals():
+
     for r in results:
         if r.boxes is not None and len(r.boxes) > 0:
+
             avg_conf = float(r.boxes.conf.mean())
 
-            # Show confidence (for debugging)
+            # Show confidence
             st.write(f"Average Confidence: {avg_conf:.2f}")
 
-            # Force save if confidence is below 0.9 (easier trigger)
+            # Save low confidence images
             if avg_conf < 0.9:
-                img.save(f"data/low_conf/{file.name}")
-                st.warning("Saved to low_conf for retraining ⚠️")
+                save_path = f"data/low_conf/{file.name}"
+                img.save(save_path)
 
+                st.warning("Saved to low_conf for retraining ⚠️")
     # ================== CHARTS ==================
     st.subheader("📊 Fault Distribution")
 
